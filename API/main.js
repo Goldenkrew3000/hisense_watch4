@@ -43,6 +43,13 @@ const mqtt_options = {
     rejectUnauthorized: false
 };
 
+// WOL 설정
+var wol_options = {
+    address: "255.255.255.255",
+    port: 9,
+    num_packets: 5
+};
+
 // Topics
 var topic_getVolume = "/remoteapp/tv/platform_service/" + mac_addr + "/actions/getvolume"; // /remoteapp/tv/platform_service/AA:BB:CC:DD:EE:FF/actions/getvolume WORKING
 var topic_getState = "/remoteapp/tv/ui_service/" + mac_addr + "/actions/gettvstate"; // HMMM
@@ -67,6 +74,7 @@ app.get('/get/handler', (req, res) => {
     var payload = req.query.payload;
     log(chalk.magenta(`Express: Received Get, Param: ${param}, Payload: ${payload}`));
     handleGet(param, payload);
+    res.send("OK");
 });
 
 app.get('/send/handler', (req, res) => {
@@ -74,19 +82,14 @@ app.get('/send/handler', (req, res) => {
     var payload = req.query.payload;
     log(chalk.magenta(`Express: Received Send, Param: ${param}, Payload: ${payload}`));
     handleSend(param, payload);
+    res.send("OK");
 });
 
 app.get('/powerlan', (req, res) => {
     log(chalk.magenta("Express: Received WOL Request, WOL Packets being sent"));
-
-    var opts = {
-        address: "255.255.255.255",
-        port: 9,
-        num_packets: 5
-    };
-    
-    wol.wake(mqtt_mac_addr, opts);
-})
+    wol.wake(mqtt_mac_addr, wol_options); // Note: This does not work on windows due to some fucky wucky routing stuff
+    res.send("OK");
+});
 
 
 
