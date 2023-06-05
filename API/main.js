@@ -9,12 +9,14 @@ const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const chalk = require('chalk');
+const log = console.log;
 
 // Initialize Express
 const app = express();
 
 // 설정
-const mqtt_ip = "192.168.0.41";
+const mqtt_ip = "192.168.5.3";
 const mqtt_port = "36669"
 const mqtt_user = "hisenseservice";
 const mqtt_pass = "multimqttservice";
@@ -25,6 +27,7 @@ const mqtt_cert = fs.readFileSync(path.join(__dirname, "./rcm_certchain_pem.cer"
 const express_port = 36668;
 const mac_addr = "AA:BB:CC:DD:EE:FF";
 
+// MQTT 연결 설정
 const mqtt_options = {
     port: mqtt_port,
     host: mqtt_ip,
@@ -43,30 +46,28 @@ var topic_getState = "/remoteapp/tv/ui_service/" + mac_addr + "/actions/gettvsta
 var topic_getSourceList = "/remoteapp/tv/ui_service/" + mac_addr + "/actions/sourcelist";
 
 var topic_sendKey = "/remoteapp/tv/remote_service/" + mac_addr + "/actions/sendkey";
-var topic_sendSleep = "/remoteapp/mobile/broadcast/platform_service/actions/tvsleep"; // FIX
+var topic_sendSleep = "TODO"; // FIX
 
 // 프로그램 시작
-console.log("MQTT <---> API Bridge for Hisense U9G");
-console.log("설정:");
-console.log("Broker: " + mqtt_ip + ":" + mqtt_port);
+log(chalk.magenta("MQTT <---> API Bridge for Hisense U9G"));
+log("설정:");
+log("Broker: " + mqtt_ip + ":" + mqtt_port);
 
 // TV를 연결해
-console.log("Connecting to MQTT Broker...");
+log("Connecting to MQTT Broker...");
 const mqtt_client = mqtt.connect(mqtt_options);
-
-// 지금부터 async 모두 :(
 
 app.get('/get/handler', (req, res) => {
     var param = req.query.param;
     var payload = req.query.payload;
-    console.log("Express: Received Get, Param: " + param + ", Payload: " + payload);
+    log(chalk.magenta(`Express: Received Get, Param: ${param}, Payload: ${payload}`));
     handleGet(param, payload);
 });
 
 app.get('/send/handler', (req, res) => {
     var param = req.query.param;
     var payload = req.query.payload;
-    console.log("Express: Received Get, Param: " + param + ", Payload: " + payload);
+    log(chalk.magenta(`Express: Received Send, Param: ${param}, Payload: ${payload}`));
     handleSend(param, payload);
 });
 
@@ -88,12 +89,9 @@ function handleGet(param, payload) {
     } else if (param == "source") {
         mqtt_publish(topic_getSourceList);
     } else {
-        console.log("HandleGet: Unknown Param");
+        log(chalk.red("HandleGet: Unknown Param"));
     }
 }
-
-
-
 
 
 
@@ -108,23 +106,38 @@ function handleSend(param, payload) {
     } else if (param == "sleep") {
         mqtt_publish(topic_sendSleep);
     } else {
-        console.log("HandleSend: Unknown Param");
+        log(chalk.red("HandleSend: Unknown Param"));
     }
 }
+
+
 
 mqtt_client.on('message', function(topic, message) {
     var resTopic = topic.toString();
     var resMsg = message.toString();
     var jsonMsg = JSON.parse(resMsg);
 
-    console.log("Topic: " + resTopic + " --- Msg: " + resMsg);
-    
-
-    if (topic == "/remoteapp/mobile/broadcast/platform_service/actions/volumechange") {
+    if (resTopic == "/remoteapp/mobile/broadcast/platform_service/actions/volumechange") {
         // TV Changed Volume
-    } else if (topic == "/remoteapp/mobile/broadcast/ui_service/state") {
+    } else if (resTopic == "/remoteapp/mobile/broadcast/ui_service/state") {
         // State Changed
-        console.log(jsonMsg["statetype"]);
+        if (jsonMsg["statetype"] == "livetv") {
+            // TV is currently in Live TV mode
+            var tv_channel_num = jsonMsg["channel_num"];
+            var tv_progname = jsonMsg["progname"];
+            var tv_channame = jsonMsg["channel_name"];
+            log(chalk.yellow(`Channel: ${tv_channame} / Channel Number: ${tv_channel_num} / Program: ${tv_progname}`));
+        } else if (jsonMsg["statetype"] == "app") {
+            // TV is currently in an app
+            var app_name = jsonMsg["name"];
+            var app_url = jsonMsg["url"];
+            log(chalk.yellow(`App: ${app_name} / Url: ${app_url}`));
+        } else if (jsonMsg["statetype"] == "remote_launcher") {
+            // TV is currently in the home app
+            log(chalk.yellow("TV is in home app"));
+        }
+    } else {
+        log(chalk.red(`Unknown Topic: ${resTopic} --- ${resMsg}`));
     }
 });
 
@@ -142,8 +155,6 @@ function mqtt_publish(mqtt_topic) {
 }
 
 function mqtt_publish_payload(mqtt_topic, mqtt_message) {
-    console.log(mqtt_topic);
-    console.log(mqtt_message);
     mqtt_client.publish(mqtt_topic, mqtt_message, (error) => {});
 }
 
@@ -152,18 +163,18 @@ app.get('/', (req, res) => {
 });
 
 app.listen(express_port, () => {
-    console.log(`Express: Listening on port ${express_port}`);
+    log(chalk.green(`Express: Listening on port ${express_port}`));
 });
 
 mqtt_client.on('connect', () => {
-    console.log("MQTT: Connected");
+    log(chalk.green("MQTT: Connected"));
     mqtt_client.subscribe("#");
 });
 
 mqtt_client.on('reconnect', () => {
-    console.log("MQTT: Reconnecting");
+    log(chalk.yellow("MQTT: Reconnecting"));
 })
 
 mqtt_client.on('close', () => {
-    console.log("MQTT: Disconnected");
+    log(chalk.red("MQTT: Disconnected"));
 });
